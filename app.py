@@ -34,32 +34,28 @@ def ping():
     mac = data.get("mac")
 
     if not mac:
-        return jsonify({"error": "mac é obrigatório"}), 400
+        return jsonify({"status": "erro", "mensagem": "MAC não fornecido"}), 400
 
-    clientes = carregar_clientes()
-    agora_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(CLIENTES_FILE, "r+") as f:
+        clientes = json.load(f)
+        if mac not in clientes:
+            # Cadastra novo cliente automaticamente
+            clientes[mac] = {
+                "nome": f"Cliente {mac[-4:]}",  # nome padrão com final do MAC
+                "ultimo_update": "",
+                "online": True
+            }
+            print(f"Novo cliente registrado: {mac}")
+        else:
+            clientes[mac]["online"] = True
 
-    mac_existente = False
-    for cliente_id, c in clientes.items():
-        if c.get("mac") == mac:
-            c["ultimo_ping"] = agora_str
-            mac_existente = True
-            break
+        # Volta o ponteiro ao início do arquivo e sobrescreve
+        f.seek(0)
+        json.dump(clientes, f, indent=4)
+        f.truncate()
 
-    if not mac_existente:
-        # Associa MAC a 1º cliente sem MAC
-        for cliente_id, c in clientes.items():
-            if not c.get("mac"):
-                c["mac"] = mac
-                c["ultimo_ping"] = agora_str
-                mac_existente = True
-                break
+    return jsonify({"status": "ok"})
 
-    if not mac_existente:
-        return jsonify({"error": "Sem clientes livres para associar esse MAC"}), 404
-
-    salvar_clientes(clientes)
-    return jsonify({"status": "ok"}), 200
 
 
 @app.route("/upload/<cliente_id>", methods=["POST"])
