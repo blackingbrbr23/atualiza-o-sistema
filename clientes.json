@@ -1,10 +1,14 @@
 {
   "cliente001": {
-    "nome": "Cliente 001",
-    "ultima_atualizacao": "Nunca"
+    "nome": "João",
+    "mac": "",
+    "ultima_atualizacao": "Nunca",
+    "ultimo_ping": null
   },
   "cliente002": {
-    "nome": "Cliente 002",
-    "ultima_atualizacao": "Nunca"
+    "nome": "Maria",
+    "mac": "",
+    "ultima_atualizacao": "Nunca",
+    "ultimo_ping": null
   }
 }
