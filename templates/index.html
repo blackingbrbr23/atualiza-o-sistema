@@ -26,9 +26,12 @@
             <td>{{ dados.mac if dados.mac else '---' }}</td>
             <td>
               {% if dados.ultimo_ping %}
-                {% set ultimo_ping_dt = dados.ultimo_ping | datetime.strptime("%Y-%m-%d %H:%M:%S") %}
-                {% set online = (now() - ultimo_ping_dt).total_seconds() < 300 %}
-                {% if online %}
+                {% if dados.online %}
+                  <span class="badge bg-success">● Online</span>
+                {% else %}
+                  <span class="badge bg-danger">● Offline</span>
+                {% endif %}
+
                   <span class="badge bg-success">● Online</span>
                 {% else %}
                   <span class="badge bg-danger">● Offline</span>
