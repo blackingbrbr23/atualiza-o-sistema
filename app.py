@@ -25,7 +25,6 @@ def index():
     clientes = carregar_clientes()
     agora = datetime.now()
 
-    # Verifica quem está online (ping dentro dos últimos 5 minutos)
     for cliente_id, dados in clientes.items():
         dados['online'] = False
         if 'ultimo_ping' in dados and dados['ultimo_ping']:
@@ -51,10 +50,10 @@ def upload(cliente_id):
     if arquivo.filename == '':
         return "Nenhum arquivo selecionado", 400
 
-    if not arquivo.filename.endswith('.exe'):
-        return "Apenas arquivos .exe são permitidos", 400
+    if not arquivo.filename.endswith('.rar'):
+        return "Apenas arquivos .rar são permitidos", 400
 
-    nome_arquivo = f"{cliente_id}.exe"
+    nome_arquivo = f"{cliente_id}.rar"
     caminho = os.path.join(UPLOAD_FOLDER, nome_arquivo)
     arquivo.save(caminho)
 
@@ -65,7 +64,7 @@ def upload(cliente_id):
 
 @app.route('/download/<cliente_id>')
 def baixar_atualizacao(cliente_id):
-    nome_arquivo = f"{cliente_id}.zip"
+    nome_arquivo = f"{cliente_id}.rar"
     caminho = os.path.join(UPLOAD_FOLDER, nome_arquivo)
     if not os.path.exists(caminho):
         return "Arquivo não encontrado", 404
@@ -81,7 +80,6 @@ def ping():
     clientes = carregar_clientes()
 
     if mac not in clientes:
-        # Adiciona cliente novo com MAC e nome genérico
         clientes[mac] = {
             "nome": f"Cliente {len(clientes)+1}",
             "mac": mac,
@@ -89,7 +87,6 @@ def ping():
             "ultima_atualizacao": "---"
         }
     else:
-        # Atualiza último ping
         clientes[mac]['ultimo_ping'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     salvar_clientes(clientes)
