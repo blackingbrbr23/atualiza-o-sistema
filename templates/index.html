@@ -1,18 +1,55 @@
-<!doctype html>
-<html>
-<head><title>Painel de Atualizações</title></head>
-<body>
-  <h1>Enviar nova versão</h1>
-  <form action="/upload" method="post" enctype="multipart/form-data">
-    <input type="file" name="arquivo" required>
-    <input type="submit" value="Enviar">
-  </form>
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Painel de Atualização</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+</head>
+<body class="bg-light">
+  <div class="container py-4">
+    <h1 class="mb-4">Painel de Atualização de Clientes</h1>
 
-  <h2>Arquivos já enviados:</h2>
-  <ul>
-    {% for arq in arquivos %}
-      <li><a href="{{ url_for('static', filename='atualizacoes/' + arq) }}">{{ arq }}</a></li>
-    {% endfor %}
-  </ul>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          <div class="alert alert-{{category}} alert-dismissible fade show" role="alert">
+            {{ msg }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <table class="table table-striped table-hover bg-white rounded shadow-sm">
+      <thead>
+        <tr>
+          <th>Cliente</th>
+          <th>Última Atualização</th>
+          <th>Enviar Atualização (.zip)</th>
+          <th>Link para Cliente</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cliente_id, dados in clientes.items() %}
+          <tr>
+            <td>{{ dados.nome }}</td>
+            <td>{{ dados.ultima_atualizacao }}</td>
+            <td>
+              <form action="{{ url_for('upload', cliente_id=cliente_id) }}" method="post" enctype="multipart/form-data" class="d-flex align-items-center">
+                <input type="file" name="arquivo" accept=".zip" class="form-control form-control-sm me-2" required />
+                <button type="submit" class="btn btn-primary btn-sm">Atualizar</button>
+              </form>
+            </td>
+            <td>
+              <a href="{{ url_for('baixar_atualizacao', cliente_id=cliente_id) }}" target="_blank" class="btn btn-outline-secondary btn-sm">Baixar</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
