@@ -1,0 +1,10 @@
+{
+  "cliente001": {
+    "nome": "Cliente 001",
+    "ultima_atualizacao": "Nunca"
+  },
+  "cliente002": {
+    "nome": "Cliente 002",
+    "ultima_atualizacao": "Nunca"
+  }
+}
