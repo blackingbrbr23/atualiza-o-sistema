@@ -25,17 +25,8 @@
             <td>{{ dados.nome }}</td>
             <td>{{ dados.mac if dados.mac else '---' }}</td>
             <td>
-              {% if dados.ultimo_ping %}
-                {% if dados.online %}
-                  <span class="badge bg-success">● Online</span>
-                {% else %}
-                  <span class="badge bg-danger">● Offline</span>
-                {% endif %}
-
-                  <span class="badge bg-success">● Online</span>
-                {% else %}
-                  <span class="badge bg-danger">● Offline</span>
-                {% endif %}
+              {% if dados.online %}
+                <span class="badge bg-success">● Online</span>
               {% else %}
                 <span class="badge bg-danger">● Offline</span>
               {% endif %}
@@ -48,7 +39,7 @@
               </form>
             </td>
             <td>
-              <a href="{{ url_for('baixar_atualizacao', mac=cliente_id) }}" target="_blank" class="btn btn-outline-secondary btn-sm">Baixar</a>
+              <a href="{{ url_for('baixar_atualizacao', cliente_id=cliente_id) }}" target="_blank" class="btn btn-outline-secondary btn-sm">Baixar</a>
             </td>
           </tr>
         {% endfor %}
