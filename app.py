@@ -1,86 +1,100 @@
-from flask import Flask, render_template, request, send_file, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, abort
 from datetime import datetime
 import os
 import json
 
 app = Flask(__name__)
+UPLOAD_FOLDER = "atualizacoes"
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
-# Caminhos
-DADOS_JSON = 'clientes.json'
-PASTA_ATUALIZACOES = 'atualizacoes'
+CLIENTES_FILE = "clientes.json"
 
-# Criar a pasta de atualizações se não existir
-os.makedirs(PASTA_ATUALIZACOES, exist_ok=True)
-
-# Função para carregar os dados
 def carregar_clientes():
-    if os.path.exists(DADOS_JSON):
-        with open(DADOS_JSON, 'r') as f:
-            return json.load(f)
-    return {}
+    if not os.path.exists(CLIENTES_FILE):
+        return {}
+    with open(CLIENTES_FILE, "r") as f:
+        return json.load(f)
 
-# Função para salvar os dados
 def salvar_clientes(clientes):
-    with open(DADOS_JSON, 'w') as f:
+    with open(CLIENTES_FILE, "w") as f:
         json.dump(clientes, f, indent=4)
 
-# Rota principal (painel)
 @app.route('/')
 def index():
     clientes = carregar_clientes()
-    return render_template('index.html', clientes=clientes, now=datetime.now)
+    agora = datetime.now()
 
-# Rota que o cliente chama ao executar o programa pela primeira vez
-@app.route('/ping', methods=['POST'])
-def ping():
-    dados = request.get_json()
-    mac = dados.get('mac')
+    # Verifica quem está online (ping dentro dos últimos 5 minutos)
+    for cliente_id, dados in clientes.items():
+        dados['online'] = False
+        if 'ultimo_ping' in dados and dados['ultimo_ping']:
+            try:
+                dt_ping = datetime.strptime(dados['ultimo_ping'], "%Y-%m-%d %H:%M:%S")
+                if (agora - dt_ping).total_seconds() < 300:
+                    dados['online'] = True
+            except Exception as e:
+                print(f"Erro ao processar data de ping: {e}")
 
-    if not mac:
-        return "MAC não fornecido", 400
+    return render_template('index.html', clientes=clientes)
 
-    clientes = carregar_clientes()
-    
-    if mac not in clientes:
-        clientes[mac] = {
-            "mac": mac,
-            "nome": f"Cliente {len(clientes)+1}",
-            "ultimo_ping": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "ultima_atualizacao": "---"
-        }
-    else:
-        clientes[mac]["ultimo_ping"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    salvar_clientes(clientes)
-    return "Ping registrado", 200
-
-# Rota para enviar atualização .zip para um cliente específico
 @app.route('/upload/<cliente_id>', methods=['POST'])
 def upload(cliente_id):
+    clientes = carregar_clientes()
+    if cliente_id not in clientes:
+        abort(404)
+
     if 'arquivo' not in request.files:
         return "Nenhum arquivo enviado", 400
 
     arquivo = request.files['arquivo']
     if arquivo.filename == '':
-        return "Nome de arquivo inválido", 400
+        return "Nenhum arquivo selecionado", 400
 
-    caminho_arquivo = os.path.join(PASTA_ATUALIZACOES, f"{cliente_id}.zip")
-    arquivo.save(caminho_arquivo)
+    if not arquivo.filename.endswith('.zip'):
+        return "Apenas arquivos .zip são permitidos", 400
 
-    clientes = carregar_clientes()
-    if cliente_id in clientes:
-        clientes[cliente_id]["ultima_atualizacao"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        salvar_clientes(clientes)
+    nome_arquivo = f"{cliente_id}.zip"
+    caminho = os.path.join(UPLOAD_FOLDER, nome_arquivo)
+    arquivo.save(caminho)
+
+    # Atualiza a data da última atualização
+    clientes[cliente_id]['ultima_atualizacao'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    salvar_clientes(clientes)
 
     return redirect(url_for('index'))
 
-# Rota para baixar atualização
-@app.route('/baixar/<mac>')
-def baixar_atualizacao(mac):
-    caminho_arquivo = os.path.join(PASTA_ATUALIZACOES, f"{mac}.zip")
-    if os.path.exists(caminho_arquivo):
-        return send_file(caminho_arquivo, as_attachment=True)
-    return "Arquivo não encontrado", 404
+@app.route('/download/<cliente_id>')
+def baixar_atualizacao(cliente_id):
+    nome_arquivo = f"{cliente_id}.zip"
+    caminho = os.path.join(UPLOAD_FOLDER, nome_arquivo)
+    if not os.path.exists(caminho):
+        return "Arquivo não encontrado", 404
+    return send_from_directory(UPLOAD_FOLDER, nome_arquivo, as_attachment=True)
+
+@app.route('/ping', methods=['POST'])
+def ping():
+    data = request.get_json()
+    mac = data.get('mac')
+    if not mac:
+        return {"error": "MAC não enviado"}, 400
+
+    clientes = carregar_clientes()
+
+    if mac not in clientes:
+        # Adiciona cliente novo com MAC e nome genérico
+        clientes[mac] = {
+            "nome": f"Cliente {len(clientes)+1}",
+            "mac": mac,
+            "ultimo_ping": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "ultima_atualizacao": "---"
+        }
+    else:
+        # Atualiza último ping
+        clientes[mac]['ultimo_ping'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    salvar_clientes(clientes)
+    return {"message": "Ping recebido"}, 200
 
 if __name__ == '__main__':
     app.run(debug=True)
