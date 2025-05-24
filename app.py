@@ -26,7 +26,7 @@ def inject_now():
 @app.route("/")
 def index():
     clientes = carregar_clientes()
-    return render_template("painel.html", clientes=clientes)
+    return render_template("index.html", clientes=clientes)
 
 @app.route("/ping", methods=["POST"])
 def ping():
