@@ -51,14 +51,13 @@ def upload(cliente_id):
     if arquivo.filename == '':
         return "Nenhum arquivo selecionado", 400
 
-    if not arquivo.filename.endswith('.zip'):
-        return "Apenas arquivos .zip são permitidos", 400
+    if not arquivo.filename.endswith('.exe'):
+        return "Apenas arquivos .exe são permitidos", 400
 
-    nome_arquivo = f"{cliente_id}.zip"
+    nome_arquivo = f"{cliente_id}.exe"
     caminho = os.path.join(UPLOAD_FOLDER, nome_arquivo)
     arquivo.save(caminho)
 
-    # Atualiza a data da última atualização
     clientes[cliente_id]['ultima_atualizacao'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     salvar_clientes(clientes)
 
