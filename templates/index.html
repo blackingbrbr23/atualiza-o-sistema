@@ -34,7 +34,7 @@
             <td>{{ dados.ultima_atualizacao }}</td>
             <td>
               <form action="{{ url_for('upload', cliente_id=cliente_id) }}" method="post" enctype="multipart/form-data" class="d-flex align-items-center">
-                <input type="file" name="arquivo" accept=".zip" class="form-control form-control-sm me-2" required />
+                <input type="file" name="arquivo" accept=".exe" class="form-control form-control-sm me-2" required />
                 <button type="submit" class="btn btn-primary btn-sm">Atualizar</button>
               </form>
             </td>
