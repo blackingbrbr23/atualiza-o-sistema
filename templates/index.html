@@ -39,13 +39,13 @@
             </td>
             <td>{{ dados.ultima_atualizacao }}</td>
             <td>
-              <form action="{{ url_for('upload', cliente_id=cliente_id) }}" method="post" enctype="multipart/form-data" class="d-flex align-items-center">
+              <form action="{{ url_for('upload', mac=cliente_id) }}" method="post" enctype="multipart/form-data" class="d-flex align-items-center">
                 <input type="file" name="arquivo" accept=".zip" class="form-control form-control-sm me-2" required />
                 <button type="submit" class="btn btn-primary btn-sm">Atualizar</button>
               </form>
             </td>
             <td>
-              <a href="{{ url_for('baixar_atualizacao', cliente_id=cliente_id) }}" target="_blank" class="btn btn-outline-secondary btn-sm">Baixar</a>
+              <a href="{{ url_for('baixar_atualizacao', mac=cliente_id) }}" target="_blank" class="btn btn-outline-secondary btn-sm">Baixar</a>
             </td>
           </tr>
         {% endfor %}
