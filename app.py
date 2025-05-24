@@ -24,7 +24,7 @@ def salvar_clientes(clientes):
 @app.route("/")
 def painel():
     clientes = carregar_clientes()
-    return render_template("painel.html", clientes=clientes)
+    return render_template("index.html", clientes=clientes)
 
 
 @app.route("/ping", methods=["POST"])
