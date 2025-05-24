@@ -22,7 +22,7 @@ def salvar_clientes(clientes):
 @app.route("/", methods=["GET"])
 def painel():
     clientes = carregar_clientes()
-    return render_template("painel.html", clientes=clientes)
+    return render_template("index.html", clientes=clientes)
 
 @app.route("/upload/<cliente_id>", methods=["POST"])
 def upload(cliente_id):
