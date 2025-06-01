@@ -1,128 +1,263 @@
 from flask import Flask, render_template, request, redirect, url_for, send_from_directory, abort
 from datetime import datetime
 import os
-import json
 import shutil
+import psycopg2
 
 app = Flask(__name__)
+
+# ====== CONFIGURAÇÃO DO BANCO (Supabase Pooler) ======
+DATABASE_URL = (
+    "postgresql://"
+    "postgres.olmnsorpzkxqojrgljyy:%40%40W365888aw"
+    "@aws-0-sa-east-1.pooler.supabase.com:6543/postgres"
+)
+
+def get_db_connection():
+    """
+    Retorna uma conexão psycopg2 para o DATABASE_URL configurado.
+    """
+    return psycopg2.connect(DATABASE_URL)
+
+
+def init_db():
+    """
+    Cria automaticamente a tabela 'clientes' caso não exista.
+    Campos:
+      - mac (TEXT PRIMARY KEY)
+      - nome (TEXT NOT NULL)
+      - ultimo_ping (TIMESTAMP)           → último momento em que o cliente deu ping
+      - ultima_atualizacao (TEXT DEFAULT '---')
+    """
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS clientes (
+                    mac TEXT PRIMARY KEY,
+                    nome TEXT NOT NULL,
+                    ultimo_ping TIMESTAMP,
+                    ultima_atualizacao TEXT DEFAULT '---'
+                );
+            """)
+            conn.commit()
+
+
+# ====== CONFIGURAÇÃO DOS ARQUIVOS ======
 UPLOAD_FOLDER = "atualizacoes"
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-CLIENTES_FILE = "clientes.json"
 
-def carregar_clientes():
-    if not os.path.exists(CLIENTES_FILE):
-        return {}
-    with open(CLIENTES_FILE, "r") as f:
-        return json.load(f)
+@app.before_first_request
+def startup():
+    """
+    Ao iniciar o servidor Flask, executa init_db() para garantir que a tabela exista.
+    """
+    init_db()
 
-def salvar_clientes(clientes):
-    with open(CLIENTES_FILE, "w") as f:
-        json.dump(clientes, f, indent=4)
+
+# ====== ROTAS ======
 
 @app.route('/')
 def index():
-    clientes = carregar_clientes()
+    """
+    Página principal: lista todos os clientes no banco, calcula se estão ONLINE (ping < 5 minutos)
+    e exibe seu nome, MAC, status online/offline, data do último ping e data da última atualização.
+    """
+    clientes = {}
     agora = datetime.now()
 
-    for cliente_id, dados in clientes.items():
-        dados['online'] = False
-        if dados.get('ultimo_ping'):
-            try:
-                dt = datetime.strptime(dados['ultimo_ping'], "%Y-%m-%d %H:%M:%S")
-                if (agora - dt).total_seconds() < 300:
-                    dados['online'] = True
-            except Exception as e:
-                print(f"Erro ao processar ping: {e}")
+    # 1) Busca todos os clientes salvos no banco
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT mac, nome, ultimo_ping, ultima_atualizacao
+                FROM clientes
+                ORDER BY nome;
+            """)
+            rows = cur.fetchall()
+
+            for mac, nome, ultimo_ping, ultima_atualizacao in rows:
+                online = False
+                if ultimo_ping:
+                    # Se o ping foi nos últimos 300 segundos, consideramos online
+                    delta = (agora - ultimo_ping).total_seconds()
+                    if delta < 300:
+                        online = True
+
+                clientes[mac] = {
+                    "nome": nome,
+                    "online": online,
+                    # Formatamos último ping como string para exibir na tabela
+                    "ultimo_ping": ultimo_ping.strftime("%Y-%m-%d %H:%M:%S") if ultimo_ping else "---",
+                    "ultima_atualizacao": ultima_atualizacao or "---"
+                }
 
     return render_template('index.html', clientes=clientes)
 
+
 @app.route('/upload_all', methods=['POST'])
 def upload_all():
+    """
+    Recebe um único arquivo .rar e distribui para TODOS os clientes que existem
+    no banco de dados. Para cada cliente:
+      - Copia o arquivo temporário para nome '{mac}.rar' dentro de UPLOAD_FOLDER
+      - Atualiza o campo ultima_atualizacao no banco com timestamp atual
+    """
     if 'arquivo' not in request.files:
         return "Nenhum arquivo enviado", 400
 
     arquivo = request.files['arquivo']
-    if not arquivo.filename.endswith('.rar'):
+    if not arquivo.filename.lower().endswith('.rar'):
         return "Apenas .rar", 400
 
-    nome_temporario = 'temp.rar'
-    caminho_temp = os.path.join(UPLOAD_FOLDER, nome_temporario)
+    # Salva primeiro em um arquivo temporário
+    nome_temp = 'temp.rar'
+    caminho_temp = os.path.join(UPLOAD_FOLDER, nome_temp)
     arquivo.save(caminho_temp)
 
-    clientes = carregar_clientes()
-    agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    agora_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    for cliente_id in clientes.keys():
-        destino = os.path.join(UPLOAD_FOLDER, f"{cliente_id}.rar")
-        shutil.copy(caminho_temp, destino)
-        clientes[cliente_id]['ultima_atualizacao'] = agora
+    # 1) Busca todos os MACs de clientes no banco
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT mac FROM clientes;")
+            macs = [row[0] for row in cur.fetchall()]
 
+    # 2) Para cada MAC, copia o temp.rar e atualiza ultima_atualizacao
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            for mac in macs:
+                destino = os.path.join(UPLOAD_FOLDER, f"{mac}.rar")
+                shutil.copy(caminho_temp, destino)
+
+                cur.execute(
+                    "UPDATE clientes SET ultima_atualizacao = %s WHERE mac = %s;",
+                    (agora_str, mac)
+                )
+            conn.commit()
+
+    # Remove o temp.rar
     os.remove(caminho_temp)
-    salvar_clientes(clientes)
     return redirect(url_for('index'))
 
+
 @app.route('/upload/<cliente_id>', methods=['POST'])
-def upload(cliente_id):
-    clientes = carregar_clientes()
-    if cliente_id not in clientes:
+def upload_cliente(cliente_id):
+    """
+    Recebe um arquivo .rar específico para determinado cliente (cliente_id = MAC).
+    Se o cliente existir no banco, salva '{mac}.rar' em UPLOAD_FOLDER
+    e atualiza ultima_atualizacao para timestamp atual.
+    """
+    # Verifica se existe o cliente no banco
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM clientes WHERE mac = %s;", (cliente_id,))
+            existe = cur.fetchone() is not None
+
+    if not existe:
         abort(404)
 
     if 'arquivo' not in request.files:
-        return "Nenhum arquivo", 400
+        return "Nenhum arquivo enviado", 400
+
     arquivo = request.files['arquivo']
-    if not arquivo.filename.endswith('.rar'):
+    if not arquivo.filename.lower().endswith('.rar'):
         return "Apenas .rar", 400
 
-    nome = f"{cliente_id}.rar"
-    caminho = os.path.join(UPLOAD_FOLDER, nome)
-    arquivo.save(caminho)
-    clientes[cliente_id]['ultima_atualizacao'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    salvar_clientes(clientes)
+    nome_rar = f"{cliente_id}.rar"
+    caminho_rar = os.path.join(UPLOAD_FOLDER, nome_rar)
+    arquivo.save(caminho_rar)
+
+    agora_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE clientes SET ultima_atualizacao = %s WHERE mac = %s;",
+                (agora_str, cliente_id)
+            )
+            conn.commit()
+
     return redirect(url_for('index'))
+
 
 @app.route('/delete/<cliente_id>', methods=['POST'])
 def delete_cliente(cliente_id):
-    clientes = carregar_clientes()
-    if cliente_id in clientes:
-        clientes.pop(cliente_id)
-        salvar_clientes(clientes)
-        rar = os.path.join(UPLOAD_FOLDER, f"{cliente_id}.rar")
-        if os.path.exists(rar):
-            os.remove(rar)
+    """
+    Remove o cliente do banco e deleta também o arquivo '{mac}.rar' em UPLOAD_FOLDER (se existir).
+    """
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM clientes WHERE mac = %s;", (cliente_id,))
+            conn.commit()
+
+    rar_path = os.path.join(UPLOAD_FOLDER, f"{cliente_id}.rar")
+    if os.path.exists(rar_path):
+        os.remove(rar_path)
+
     return redirect(url_for('index'))
+
 
 @app.route('/download/<cliente_id>')
 def baixar_atualizacao(cliente_id):
-    nome = f"{cliente_id}.rar"
-    caminho = os.path.join(UPLOAD_FOLDER, nome)
+    """
+    Serve o arquivo '{mac}.rar' como anexo, se existir. Caso contrário, retorna 404.
+    """
+    nome_rar = f"{cliente_id}.rar"
+    caminho = os.path.join(UPLOAD_FOLDER, nome_rar)
     if not os.path.exists(caminho):
         return "Arquivo não encontrado", 404
-    return send_from_directory(UPLOAD_FOLDER, nome, as_attachment=True)
+
+    return send_from_directory(UPLOAD_FOLDER, nome_rar, as_attachment=True)
+
 
 @app.route('/ping', methods=['POST'])
 def ping():
+    """
+    Recebe JSON via POST com chave "mac". Se não vier "mac", retorna erro 400.
+    Se o MAC não existe no banco, insere um novo registro com:
+      - nome padrão "Cliente {N}" (sendo N = total atual de clientes + 1)
+      - ultimo_ping = timestamp de agora
+      - ultima_atualizacao = '---'
+    Se existir, apenas atualiza o campo ultimo_ping para timestamp de agora.
+    """
     data = request.get_json()
-    mac = data.get('mac')
-    if not mac:
+    if not data or 'mac' not in data:
         return {"error": "MAC não enviado"}, 400
 
-    clientes = carregar_clientes()
-    agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    mac = data['mac']
+    agora = datetime.now()
 
-    if mac not in clientes:
-        clientes[mac] = {
-            "nome": f"Cliente {len(clientes)+1}",
-            "mac": mac,
-            "ultimo_ping": agora,
-            "ultima_atualizacao": "---"
-        }
-    else:
-        clientes[mac]['ultimo_ping'] = agora
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            # Verifica se já existe
+            cur.execute("SELECT COUNT(*) FROM clientes WHERE mac = %s;", (mac,))
+            exists = (cur.fetchone()[0] > 0)
 
-    salvar_clientes(clientes)
+            if exists:
+                # Atualiza apenas último ping
+                cur.execute(
+                    "UPDATE clientes SET ultimo_ping = %s WHERE mac = %s;",
+                    (agora, mac)
+                )
+            else:
+                # Descobre quantos clientes já existem para numerar o nome
+                cur.execute("SELECT COUNT(*) FROM clientes;")
+                total = cur.fetchone()[0] or 0
+                nome_padrao = f"Cliente {total + 1}"
+
+                cur.execute(
+                    """
+                    INSERT INTO clientes (mac, nome, ultimo_ping, ultima_atualizacao)
+                    VALUES (%s, %s, %s, %s);
+                    """,
+                    (mac, nome_padrao, agora, "---")
+                )
+            conn.commit()
+
     return {"message": "Ping recebido"}, 200
 
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Roda o Flask em modo debug na porta 5000 (você pode alterar se quiser)
+    app.run(debug=True, host='0.0.0.0', port=5000)
