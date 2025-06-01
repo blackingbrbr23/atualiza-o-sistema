@@ -23,6 +23,7 @@
     <div class="container">
         <h2 class="mb-4 text-center">Painel de Atualizações</h2>
 
+        <!-- Formulário para enviar um .rar a TODOS os clientes -->
         <form action="/upload_all" method="post" enctype="multipart/form-data" class="mb-4 d-flex gap-2">
             <input type="file" name="arquivo" class="form-control" required>
             <button type="submit" class="btn btn-primary">Enviar para todos</button>
@@ -42,8 +43,13 @@
             <tbody>
                 {% for cliente_id, dados in clientes.items() %}
                 <tr>
+                    <!-- Nome do cliente -->
                     <td>{{ dados.nome }}</td>
-                    <td>{{ dados.mac }}</td>
+
+                    <!-- MAC (agora usamos 'cliente_id') -->
+                    <td>{{ cliente_id }}</td>
+
+                    <!-- Status online/offline -->
                     <td>
                         {% if dados.online %}
                             <span class="online">Online</span>
@@ -51,13 +57,19 @@
                             <span class="offline">Offline</span>
                         {% endif %}
                     </td>
+
+                    <!-- Data da última atualização (.rar) -->
                     <td>{{ dados.ultima_atualizacao }}</td>
+
+                    <!-- Formulário para enviar .rar individual ao cliente -->
                     <td>
                         <form action="/upload/{{ cliente_id }}" method="post" enctype="multipart/form-data" class="d-flex gap-2 justify-content-center">
                             <input type="file" name="arquivo" accept=".rar" class="form-control form-control-sm" required>
                             <button type="submit" class="btn btn-sm btn-success">Atualizar</button>
                         </form>
                     </td>
+
+                    <!-- Botão de exclusão -->
                     <td>
                         <form action="/delete/{{ cliente_id }}" method="post" onsubmit="return confirm('Deseja excluir este cliente?')">
                             <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
